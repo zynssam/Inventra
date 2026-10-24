@@ -1,17 +1,16 @@
-# Inventra
+# React + Vite
 
-A responsive inventory management frontend prototype built with plain HTML, CSS, and JavaScript.
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-## Run locally
+Currently, two official plugins are available:
 
-Open `login.html` in a browser. Sign in with one of the demo accounts using password `demo1234`, or create a local demo account. The dashboard is `index.html`.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## Project files
+## React Compiler
 
-- `login.html` — sign-in and local demo account creation
-- `index.html` — Inventra dashboard and inventory screens
-- `assets/` — local SVG background illustrations referenced by the HTML pages
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-Keep the `assets` folder beside the HTML files so the relative background image paths continue to work. No build step or package installation is required.
+## Expanding the Oxlint configuration
 
-This is a frontend prototype. Account data is stored in the browser for demonstration and is not connected to a production authentication or inventory backend.
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
