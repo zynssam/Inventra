@@ -26,7 +26,9 @@ def _check_debug():
 
 
 @router.post("/seed-demo")
-def seed_demo(db: Session = Depends(get_db), _: User = ADMIN):
+def seed_demo(db: Session = Depends(get_db)):
+    # No auth required — this is a dev bootstrap endpoint.
+    # DEBUG check is sufficient protection.
     _check_debug()
     try:
         from app.seed import seed_demo as _seed_demo  # Member A's file

@@ -56,10 +56,12 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
+# In DEBUG mode allow all origins so any local dev port works.
+# In production the explicit whitelist in config is used.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"] if settings.DEBUG else settings.CORS_ORIGINS,
+    allow_credentials=not settings.DEBUG,  # credentials incompatible with "*"
     allow_methods=["*"],
     allow_headers=["*"],
 )
