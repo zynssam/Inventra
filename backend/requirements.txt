@@ -2,14 +2,19 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.29.0
 sqlalchemy>=2.0.30
 alembic>=1.13.0
-# psycopg2-binary is Member A's concern for production Postgres setup.
-# Uncomment when DATABASE_URL points to PostgreSQL:
-# psycopg2-binary>=2.9.9
+
+# PostgreSQL driver — required for production.
+# Member A's docker-compose brings up Postgres; uncomment when pointing there.
+# psycopg>=3.1.0          # modern async-capable driver (recommended)
+# psycopg2-binary>=2.9.9  # legacy sync-only driver (alternative)
+
 pydantic[email]>=2.10.0
 pydantic-settings>=2.6.0
 bcrypt>=4.0.0
 python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.9
+
+# Testing
 httpx>=0.27.0
 pytest>=8.0.0
 aiosqlite>=0.20.0
