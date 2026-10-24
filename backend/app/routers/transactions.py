@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import require_role
 from app.errors import ApiError
-from app.models import StockTransaction, User
+from app.models import Product, StockTransaction, User
 from app.schemas import (
     AdjustmentRequest, Page, ReverseRequest,
     StockInRequest, StockOutRequest, TransactionOut,
@@ -24,6 +24,7 @@ ADMIN = Depends(require_role("admin"))
 @router.get("", response_model=Page[TransactionOut])
 def list_transactions(
     product_id: int | None = None,
+    txn_type: str | None = None,
     page: int = 1,
     page_size: int = 50,
     db: Session = Depends(get_db),
@@ -32,8 +33,26 @@ def list_transactions(
     q = db.query(StockTransaction)
     if product_id:
         q = q.filter(StockTransaction.product_id == product_id)
+    if txn_type:
+        q = q.filter(StockTransaction.txn_type == txn_type)
     total = q.count()
-    items = q.order_by(StockTransaction.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    # Sort by id DESC — guarantees newest rows appear first even when
+    # multiple rows share the same created_at timestamp (e.g. seed data)
+    rows = q.order_by(StockTransaction.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    # Enrich with product name + sku (batch fetch to avoid N+1)
+    product_ids = {r.product_id for r in rows}
+    products = {p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
+
+    items = []
+    for r in rows:
+        out = TransactionOut.model_validate(r)
+        prod = products.get(r.product_id)
+        if prod:
+            out.product_name = prod.name
+            out.sku = prod.sku
+        items.append(out)
+
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 

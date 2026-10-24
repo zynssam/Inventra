@@ -270,6 +270,8 @@ class ReverseRequest(BaseModel):
 class TransactionOut(ORMBase):
     id: int
     product_id: int
+    product_name: Optional[str] = None
+    sku: Optional[str] = None
     txn_type: str
     quantity_delta: int
     balance_after: int
