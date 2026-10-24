@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" fill="none">
+  <defs>
+    <radialGradient id="violet" cx="0" cy="0" r="1" gradientTransform="matrix(424 348 -338 411 1273 86)" gradientUnits="userSpaceOnUse"><stop stop-color="#8E82FF" stop-opacity=".3"/><stop offset="1" stop-color="#8E82FF" stop-opacity="0"/></radialGradient>
+    <radialGradient id="aqua" cx="0" cy="0" r="1" gradientTransform="matrix(391 335 -331 387 299 870)" gradientUnits="userSpaceOnUse"><stop stop-color="#6CCCB1" stop-opacity=".24"/><stop offset="1" stop-color="#6CCCB1" stop-opacity="0"/></radialGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.25" fill="#685CE4" fill-opacity=".22"/></pattern>
+    <linearGradient id="box" x1="1060" x2="1352" y1="528" y2="817" gradientUnits="userSpaceOnUse"><stop stop-color="#A49AFF" stop-opacity=".21"/><stop offset="1" stop-color="#A49AFF" stop-opacity=".04"/></linearGradient>
+  </defs>
+  <path fill="url(#violet)" d="M810 0h790v775H810z"/><path fill="url(#aqua)" d="M0 490h720v610H0z"/>
+  <path fill="url(#dots)" d="M1148 108h280v198h-280z" opacity=".55"/>
+  <g opacity=".48" stroke="#7469F2" stroke-width="2"><circle cx="1312" cy="300" r="208"/><circle cx="1312" cy="300" r="245"/><circle cx="1312" cy="300" r="282"/></g>
+  <g fill="url(#box)" stroke="#675CE1" stroke-opacity=".21" stroke-width="2"><path d="m1087 626 84-48 84 48v98l-84 49-84-49z"/><path d="m1087 626 84 50 84-50m-84 50v97"/><path d="m1275 734 62-36 62 36v72l-62 36-62-36z"/><path d="m1275 734 62 37 62-37m-62 37v71"/></g>
+  <g fill="#FFF" fill-opacity=".5"><circle cx="183" cy="306" r="7"/><circle cx="221" cy="306" r="4"/><circle cx="183" cy="344" r="4"/><circle cx="221" cy="344" r="7"/></g>
+</svg>

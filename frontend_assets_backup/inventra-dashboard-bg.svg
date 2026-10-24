@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" fill="none">
+  <defs>
+    <radialGradient id="lavender" cx="0" cy="0" r="1" gradientTransform="matrix(376 364 -289 298 1294 108)" gradientUnits="userSpaceOnUse"><stop stop-color="#8E83FF" stop-opacity=".2"/><stop offset="1" stop-color="#8E83FF" stop-opacity="0"/></radialGradient>
+    <radialGradient id="mint" cx="0" cy="0" r="1" gradientTransform="matrix(296 260 -207 235 321 811)" gradientUnits="userSpaceOnUse"><stop stop-color="#91D9C4" stop-opacity=".17"/><stop offset="1" stop-color="#91D9C4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="stroke" x1="1030" x2="1510" y1="99" y2="552" gradientUnits="userSpaceOnUse"><stop stop-color="#7469F2" stop-opacity=".12"/><stop offset="1" stop-color="#7469F2" stop-opacity="0"/></linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.3" fill="#8076E8" fill-opacity=".16"/></pattern>
+  </defs>
+  <path fill="url(#lavender)" d="M850 0h750v760H850z"/>
+  <path fill="url(#mint)" d="M0 540h650v560H0z"/>
+  <circle cx="1340" cy="202" r="216" stroke="url(#stroke)" stroke-width="1.5"/>
+  <circle cx="1340" cy="202" r="250" stroke="url(#stroke)" stroke-width="1"/>
+  <circle cx="1340" cy="202" r="285" stroke="url(#stroke)" stroke-width="1"/>
+  <path fill="url(#dots)" d="M1100 390h250v160h-250z" opacity=".7"/>
+  <g opacity=".16" stroke="#7469F2" stroke-width="2">
+    <path d="m1203 624 58-34 58 34v68l-58 34-58-34z"/><path d="m1203 624 58 34 58-34m-58 34v68"/>
+    <path d="m1338 696 43-25 43 25v50l-43 25-43-25z"/><path d="m1338 696 43 25 43-25m-43 25v50"/>
+  </g>
+</svg>

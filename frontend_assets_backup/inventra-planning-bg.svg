@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" fill="none">
+  <defs><radialGradient id="p" cx="0" cy="0" r="1" gradientTransform="matrix(389 278 -303 424 935 118)" gradientUnits="userSpaceOnUse"><stop stop-color="#8B80F9" stop-opacity=".27"/><stop offset="1" stop-color="#8B80F9" stop-opacity="0"/></radialGradient><radialGradient id="g" cx="0" cy="0" r="1" gradientTransform="matrix(310 213 -221 322 200 704)" gradientUnits="userSpaceOnUse"><stop stop-color="#64C6A4" stop-opacity=".2"/><stop offset="1" stop-color="#64C6A4" stop-opacity="0"/></radialGradient><pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#6258D8" fill-opacity=".2"/></pattern></defs>
+  <path fill="url(#p)" d="M530 0h670v650H530z"/><path fill="url(#g)" d="M0 380h570v420H0z"/><path fill="url(#dots)" d="M820 420h300v210H820z"/>
+  <g stroke="#6559E8" stroke-opacity=".34" stroke-width="2"><path d="M815 353c75-91 139-95 198-36 57 57 109 43 151-13"/><path d="M815 385c75-91 139-95 198-36 57 57 109 43 151-13" stroke-dasharray="5 8"/></g>
+  <g fill="#FFF" fill-opacity=".54"><rect x="912" y="138" width="100" height="59" rx="12"/><rect x="1027" y="178" width="72" height="43" rx="10"/><rect x="838" y="219" width="61" height="37" rx="9"/></g>
+</svg>
