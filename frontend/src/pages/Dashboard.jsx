@@ -25,7 +25,9 @@ export default function Dashboard() {
       DashboardAPI.categoryValue(),
       DashboardAPI.recentTransactions(),
     ]).then(([s, al, ch, cv, rt]) => {
-      setSummary(s); setAlerts(al); setChart(ch); setCatVal(cv); setRecent(rt);
+      setSummary(s); setAlerts(al); setChart(ch); setRecent(rt);
+      // API returns value as string e.g. "4655.0" — Recharts needs Number
+      setCatVal((cv ?? []).map(c => ({ ...c, value: Number(c.value) })));
     }).catch(console.error).finally(() => setLoading(false));
   }, [days]);
 
