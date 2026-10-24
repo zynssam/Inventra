@@ -1,6 +1,6 @@
-# StockSense — Backend API
+# Inventra — Backend API
 
-FastAPI backend for the StockSense inventory management system.  
+FastAPI backend for the Inventra inventory management system.  
 Member A owns the database layer (`database/`). Member B owns everything here.
 
 ---
@@ -58,9 +58,9 @@ Seed via `POST /api/v1/dev/seed-demo` (requires `DEBUG=true` in `.env`).
 
 | Role          | Email                 | Password   |
 |---------------|-----------------------|------------|
-| Admin         | admin@stocksense.dev  | admin123   |
-| Store Manager | store@stocksense.dev  | store123   |
-| Viewer        | viewer@stocksense.dev | viewer123  |
+| Admin         | admin@inventra.dev    | admin123   |
+| Store Manager | store@inventra.dev    | store123   |
+| Viewer        | viewer@inventra.dev   | viewer123  |
 
 ---
 
