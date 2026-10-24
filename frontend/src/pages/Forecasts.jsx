@@ -1,12 +1,12 @@
 // src/pages/Forecasts.jsx
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Forecasts as API } from "../api";
 import { PageHeader, ForecastBadge, Empty, ToastContainer } from "../components/ui";
 import { useToast } from "../hooks/useToast";
 import { TrendingUp, TrendingDown, Minus, Search, BarChart2, ChevronDown, ChevronUp } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, Legend,
+  Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 
 const TREND_ICON = {
@@ -14,91 +14,197 @@ const TREND_ICON = {
   falling: <TrendingDown size={14} color="#4ade80" />,
   steady:  <Minus       size={14} color="#fbbf24" />,
 };
-
 const STATE_COLOR = {
   critical: "#f87171", out_of_stock: "#f87171",
   warning: "#fbbf24", ok: "#4ade80",
 };
 
-// ── Inline sparkline chart (usage bars + avg line + projection) ───────────────
-function ForecastChart({ item }) {
-  if (!item.daily_series || item.daily_series.length === 0) {
-    return <div style={{ fontSize: 11, color: "var(--muted)", padding: "12px 0" }}>No daily usage data available for this window.</div>;
-  }
+// ── Build chart data from a forecast item ─────────────────────────────────────
+function buildChartData(item) {
+  if (!item.daily_series || item.daily_series.length === 0) return { hist: [], proj: [] };
 
   const avg = item.avg_daily_usage ?? 0;
 
-  // Build projection days after the last data point
-  const lastDate = item.daily_series[item.daily_series.length - 1]?.date;
-  const projectionDays = item.days_until_stockout != null ? Math.min(Math.ceil(item.days_until_stockout), 14) : 0;
-  const projections = [];
-  if (lastDate && projectionDays > 0 && avg > 0) {
-    let qty = item.current_quantity;
-    for (let i = 1; i <= projectionDays; i++) {
-      const d = new Date(lastDate);
-      d.setDate(d.getDate() + i);
-      qty = Math.max(0, qty - avg);
-      projections.push({
-        date: d.toISOString().slice(0, 10),
-        projected_stock: Math.round(qty),
-        used: null,
-      });
-    }
-  }
-
-  // Historical stock trajectory (reconstruct from current + usage)
+  // Reconstruct historical stock levels (walk backward from current qty)
   let qty = item.current_quantity;
   const histReverse = [...item.daily_series].reverse().map(d => {
     const stock = qty;
-    qty += d.used; // add back (going backwards)
-    return { date: d.date, used: d.used, stock };
+    qty += d.used;
+    return { date: d.date.slice(5), used: d.used, stock, avg: parseFloat(avg.toFixed(1)) };
   });
-  const hist = histReverse.reverse().map((d, i) => ({
-    date: d.date.slice(5),   // MM-DD
-    used: d.used,
-    stock: d.stock,
-    avg: parseFloat(avg.toFixed(1)),
-  }));
+  const hist = histReverse.reverse();
 
-  const projChart = projections.map(p => ({
-    date: p.date.slice(5),
-    projected_stock: p.projected_stock,
-  }));
+  // Projection forward
+  const lastDate = item.daily_series[item.daily_series.length - 1]?.date;
+  const projDays = item.days_until_stockout != null ? Math.min(Math.ceil(item.days_until_stockout), 10) : 0;
+  const proj = [];
+  if (lastDate && projDays > 0 && avg > 0) {
+    let pQty = item.current_quantity;
+    for (let i = 1; i <= projDays; i++) {
+      const d = new Date(lastDate);
+      d.setDate(d.getDate() + i);
+      pQty = Math.max(0, pQty - avg);
+      proj.push({ date: d.toISOString().slice(5, 10), projected_stock: Math.round(pQty) });
+    }
+  }
+  return { hist, proj };
+}
 
+// ── Hover popup chart ─────────────────────────────────────────────────────────
+function HoverChart({ item, pos }) {
+  if (!item) return null;
+  const { hist, proj } = buildChartData(item);
   const stateColor = STATE_COLOR[item.state] ?? "var(--purple)";
+  const avg = item.avg_daily_usage ?? 0;
+  const hasSeries = hist.length > 0;
+
+  // Smart positioning — keep popup on screen
+  const POPUP_W = 420, POPUP_H = 260;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = pos.x + 16;
+  let top  = pos.y - 40;
+  if (left + POPUP_W > vw - 12) left = pos.x - POPUP_W - 16;
+  if (top + POPUP_H > vh - 12) top = vh - POPUP_H - 12;
+  if (top < 8) top = 8;
 
   return (
-    <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 8 }}>
-      {/* Usage bars */}
-      <div style={{ flex: "1 1 300px" }}>
-        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontWeight: 600, letterSpacing: 1 }}>
-          DAILY USAGE (last {item.window_days}d)
+    <div style={{
+      position: "fixed", top, left, zIndex: 500,
+      width: POPUP_W,
+      background: "var(--surface)",
+      border: "1px solid var(--line)",
+      borderRadius: 16,
+      boxShadow: "0 20px 60px #00000090",
+      pointerEvents: "none",
+      animation: "fadeInPop 0.15s ease",
+      overflow: "hidden",
+    }}>
+      {/* Header strip */}
+      <div style={{
+        padding: "10px 16px 8px",
+        background: "var(--surface-2)",
+        borderBottom: "1px solid var(--line)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <div>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>{item.product_name ?? `#${item.product_id}`}</span>
+          <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 8, fontFamily: "monospace" }}>{item.sku}</span>
         </div>
-        <ResponsiveContainer width="100%" height={120}>
-          <BarChart data={hist} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <ForecastBadge state={item.state} />
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>
+            {item.days_until_stockout != null
+              ? <><span style={{ color: stateColor, fontWeight: 700 }}>{item.days_until_stockout.toFixed(1)}d</span> left</>
+              : "—"
+            }
+          </span>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div style={{ padding: "10px 12px 12px", display: "flex", gap: 10 }}>
+        {!hasSeries ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", height: 140, fontSize: 12, color: "var(--muted)" }}>
+            No daily usage data for this window
+          </div>
+        ) : (
+          <>
+            {/* Usage sparkline */}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 4, fontWeight: 700, letterSpacing: 0.8 }}>DAILY USAGE</div>
+              <ResponsiveContainer width="100%" height={130}>
+                <BarChart data={hist} margin={{ top: 4, right: 2, bottom: 0, left: -28 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 8, fill: "var(--muted)" }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 8, fill: "var(--muted)" }} />
+                  <Tooltip
+                    contentStyle={{ background: "var(--surface-3)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 10 }}
+                    labelStyle={{ color: "var(--text-2)", fontWeight: 600 }}
+                  />
+                  <Bar dataKey="used" fill="var(--purple)" opacity={0.85} radius={[2, 2, 0, 0]} name="Used" />
+                  {avg > 0 && (
+                    <ReferenceLine y={avg} stroke={stateColor} strokeDasharray="4 2"
+                      label={{ value: `~${avg.toFixed(1)}/d`, fontSize: 8, fill: stateColor, position: "right" }} />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Stock projection */}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 4, fontWeight: 700, letterSpacing: 0.8 }}>STOCK PROJECTION</div>
+              <ResponsiveContainer width="100%" height={130}>
+                <AreaChart
+                  data={[...hist.map(h => ({ date: h.date, stock: h.stock })), ...proj]}
+                  margin={{ top: 4, right: 2, bottom: 0, left: -28 }}
+                >
+                  <defs>
+                    <linearGradient id={`hg-${item.product_id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={stateColor} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={stateColor} stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id={`hp-${item.product_id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#fbbf24" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 8, fill: "var(--muted)" }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 8, fill: "var(--muted)" }} />
+                  <Tooltip
+                    contentStyle={{ background: "var(--surface-3)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 10 }}
+                    labelStyle={{ color: "var(--text-2)", fontWeight: 600 }}
+                  />
+                  <Area dataKey="stock" stroke={stateColor} fill={`url(#hg-${item.product_id})`}
+                    strokeWidth={2} name="Actual Stock" dot={false} connectNulls />
+                  <Area dataKey="projected_stock" stroke="#fbbf24" fill={`url(#hp-${item.product_id})`}
+                    strokeWidth={2} strokeDasharray="5 3" name="Projected" dot={false} connectNulls />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: "6px 16px 10px", fontSize: 10, color: "var(--muted)", borderTop: "1px solid var(--line)" }}>
+        {item.explanation}
+      </div>
+    </div>
+  );
+}
+
+// ── Inline expanded chart (click-to-expand) ───────────────────────────────────
+function ForecastChart({ item }) {
+  const { hist, proj } = buildChartData(item);
+  const stateColor = STATE_COLOR[item.state] ?? "var(--purple)";
+  const avg = item.avg_daily_usage ?? 0;
+
+  if (hist.length === 0) {
+    return <div style={{ fontSize: 12, color: "var(--muted)", padding: "10px 0" }}>No daily usage data for this window.</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 20, flexWrap: "wrap", paddingTop: 4 }}>
+      <div style={{ flex: "1 1 280px" }}>
+        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontWeight: 700, letterSpacing: 1 }}>DAILY USAGE (last {item.window_days}d)</div>
+        <ResponsiveContainer width="100%" height={130}>
+          <BarChart data={hist} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 9, fill: "var(--muted)" }} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 9, fill: "var(--muted)" }} />
-            <Tooltip
-              contentStyle={{ background: "var(--surface-3)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11 }}
-              labelStyle={{ color: "var(--text-2)", fontWeight: 600 }}
-            />
-            <Bar dataKey="used" fill="var(--purple)" opacity={0.8} radius={[2, 2, 0, 0]} name="Units Used" />
-            <ReferenceLine y={avg} stroke={stateColor} strokeDasharray="4 2" label={{ value: `avg ${avg.toFixed(1)}`, fontSize: 9, fill: stateColor }} />
+            <Tooltip contentStyle={{ background: "var(--surface-3)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11 }} />
+            <Bar dataKey="used" fill="var(--purple)" opacity={0.85} radius={[2, 2, 0, 0]} name="Units Used" />
+            {avg > 0 && <ReferenceLine y={avg} stroke={stateColor} strokeDasharray="4 2"
+              label={{ value: `avg ${avg.toFixed(1)}/d`, fontSize: 9, fill: stateColor }} />}
           </BarChart>
         </ResponsiveContainer>
       </div>
-
-      {/* Stock trajectory + projection */}
-      <div style={{ flex: "1 1 300px" }}>
-        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontWeight: 600, letterSpacing: 1 }}>
-          STOCK LEVEL + PROJECTION
-        </div>
-        <ResponsiveContainer width="100%" height={120}>
-          <AreaChart
-            data={[...hist.map(h => ({ date: h.date, stock: h.stock })), ...projChart]}
-            margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
-          >
+      <div style={{ flex: "1 1 280px" }}>
+        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontWeight: 700, letterSpacing: 1 }}>STOCK LEVEL + PROJECTION</div>
+        <ResponsiveContainer width="100%" height={130}>
+          <AreaChart data={[...hist.map(h => ({ date: h.date, stock: h.stock })), ...proj]}
+            margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
             <defs>
               <linearGradient id={`sg-${item.product_id}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={stateColor} stopOpacity={0.3} />
@@ -112,12 +218,9 @@ function ForecastChart({ item }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 9, fill: "var(--muted)" }} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 9, fill: "var(--muted)" }} />
-            <Tooltip
-              contentStyle={{ background: "var(--surface-3)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11 }}
-              labelStyle={{ color: "var(--text-2)", fontWeight: 600 }}
-            />
-            <Area dataKey="stock" stroke={stateColor} fill={`url(#sg-${item.product_id})`} strokeWidth={2} name="Actual Stock" dot={false} connectNulls />
-            <Area dataKey="projected_stock" stroke="#fbbf24" fill={`url(#pg-${item.product_id})`} strokeWidth={2} strokeDasharray="5 3" name="Projected Stock" dot={false} connectNulls />
+            <Tooltip contentStyle={{ background: "var(--surface-3)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11 }} />
+            <Area dataKey="stock" stroke={stateColor} fill={`url(#sg-${item.product_id})`} strokeWidth={2} name="Stock" dot={false} connectNulls />
+            <Area dataKey="projected_stock" stroke="#fbbf24" fill={`url(#pg-${item.product_id})`} strokeWidth={2} strokeDasharray="5 3" name="Projected" dot={false} connectNulls />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -125,19 +228,24 @@ function ForecastChart({ item }) {
   );
 }
 
-// ── Expandable row ────────────────────────────────────────────────────────────
-function ForecastRow({ f }) {
+// ── Row with hover + click expand ─────────────────────────────────────────────
+function ForecastRow({ f, onHover, onLeave }) {
   const [expanded, setExpanded] = useState(false);
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—";
   const stateColor = STATE_COLOR[f.state] ?? "var(--text)";
-  const hasSeries = f.daily_series?.length > 0;
 
   return (
     <>
-      <tr style={{ cursor: hasSeries ? "pointer" : "default" }} onClick={() => hasSeries && setExpanded(v => !v)}>
+      <tr
+        style={{ cursor: "pointer", transition: "background 0.1s" }}
+        onClick={() => setExpanded(v => !v)}
+        onMouseEnter={e => onHover(f, e)}
+        onMouseMove={e => onHover(f, e)}
+        onMouseLeave={onLeave}
+      >
         <td>
           <div style={{ fontWeight: 600 }}>{f.product_name ?? `#${f.product_id}`}</div>
-          <div className="td-muted font-mono">{f.sku}</div>
+          <div className="td-muted font-mono" style={{ fontSize: 10 }}>{f.sku}</div>
         </td>
         <td><ForecastBadge state={f.state} /></td>
         <td className="quantity">{f.current_quantity}</td>
@@ -151,16 +259,12 @@ function ForecastRow({ f }) {
         <td className="td-muted">{fmtDate(f.projected_stockout_date)}</td>
         <td>{TREND_ICON[f.trend] ?? <Minus size={14} color="var(--muted)" />}</td>
         <td className="td-muted" style={{ maxWidth: 220, whiteSpace: "normal", fontSize: 11 }}>{f.explanation ?? "—"}</td>
-        <td style={{ width: 32, textAlign: "center" }}>
-          {hasSeries && (
-            <span style={{ color: "var(--muted)" }}>
-              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </span>
-          )}
+        <td style={{ width: 28, textAlign: "center", color: "var(--muted)" }}>
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </td>
       </tr>
       {expanded && (
-        <tr>
+        <tr onMouseEnter={onLeave}>
           <td colSpan={9} style={{ background: "var(--surface-2)", padding: "14px 20px" }}>
             <ForecastChart item={f} />
           </td>
@@ -173,11 +277,16 @@ function ForecastRow({ f }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Forecasts() {
   const toast = useToast();
-  const [items, setItems]       = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [items, setItems]         = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [stateFilter, setStateFilter] = useState("");
-  const [win, setWin]           = useState(30);
-  const [search, setSearch]     = useState("");
+  const [win, setWin]             = useState(30);
+  const [search, setSearch]       = useState("");
+
+  // Hover state
+  const [hovered, setHovered]   = useState(null);  // forecast item
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const hoverTimer = useRef(null);
 
   const doFetch = useCallback(() => {
     setLoading(true);
@@ -190,18 +299,30 @@ export default function Forecasts() {
   useEffect(() => { doFetch(); }, [doFetch]);
 
   const filtered = search
-    ? items.filter(i => i.product_name?.toLowerCase().includes(search.toLowerCase()) || i.sku?.toLowerCase().includes(search.toLowerCase()))
+    ? items.filter(i =>
+        i.product_name?.toLowerCase().includes(search.toLowerCase()) ||
+        i.sku?.toLowerCase().includes(search.toLowerCase()))
     : items;
 
-  // Summary KPIs
-  const critical = items.filter(i => i.state === "critical" || i.state === "out_of_stock").length;
+  const critical = items.filter(i => ["critical","out_of_stock"].includes(i.state)).length;
   const warning  = items.filter(i => i.state === "warning").length;
   const ok       = items.filter(i => i.state === "ok").length;
+
+  function handleHover(item, e) {
+    clearTimeout(hoverTimer.current);
+    setHoverPos({ x: e.clientX, y: e.clientY });
+    // Small delay before showing — avoids flicker when moving across rows
+    hoverTimer.current = setTimeout(() => setHovered(item), 120);
+  }
+  function handleLeave() {
+    clearTimeout(hoverTimer.current);
+    setHovered(null);
+  }
 
   return (
     <div>
       <ToastContainer toasts={toast.toasts} remove={toast.remove} />
-      <PageHeader title="Forecasts" subtitle="EWMA stockout predictions · click any row for charts" />
+      <PageHeader title="Forecasts" subtitle="EWMA stockout predictions · hover for chart · click to expand" />
 
       {/* KPI strip */}
       {!loading && items.length > 0 && (
@@ -213,10 +334,9 @@ export default function Forecasts() {
           ].map(k => (
             <div key={k.label} style={{
               flex: "1 1 140px", background: "var(--surface)", border: "1px solid var(--line)",
-              borderRadius: 12, padding: "14px 18px",
-              borderLeft: `3px solid ${k.color}`,
+              borderRadius: 12, padding: "14px 18px", borderLeft: `3px solid ${k.color}`,
             }}>
-              <div style={{ font: `700 22px Manrope`, color: k.color }}>{k.value}</div>
+              <div style={{ font: "700 22px Manrope", color: k.color }}>{k.value}</div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{k.label}</div>
             </div>
           ))}
@@ -239,11 +359,11 @@ export default function Forecasts() {
           </select>
           <select className="input" style={{ width: "auto" }} value={win}
             onChange={e => setWin(Number(e.target.value))}>
-            {[7, 14, 30, 60, 90].map(d => <option key={d} value={d}>Window: {d} days</option>)}
+            {[7,14,30,60,90].map(d => <option key={d} value={d}>Window: {d} days</option>)}
           </select>
         </div>
         <div style={{ fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 4 }}>
-          <BarChart2 size={12} /> Click a row to expand chart
+          <BarChart2 size={12} /> Hover = mini chart · Click = full chart
         </div>
       </div>
 
@@ -263,12 +383,22 @@ export default function Forecasts() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={9}><Empty icon="📈" message="No forecast data" /></td></tr>
               ) : filtered.map(f => (
-                <ForecastRow key={f.product_id} f={f} />
+                <ForecastRow key={f.product_id} f={f} onHover={handleHover} onLeave={handleLeave} />
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Hover popup — rendered as fixed overlay */}
+      <HoverChart item={hovered} pos={hoverPos} />
+
+      <style>{`
+        @keyframes fadeInPop {
+          from { opacity: 0; transform: scale(0.96) translateY(4px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
