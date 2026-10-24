@@ -1,15 +1,16 @@
 """app/routers/forecasting.py — GET /forecasts and GET /forecasts/{product_id}"""
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_role
 from app.errors import ApiError
-from app.models import Product, User
+from app.models import Product, StockTransaction, User
 from app.queries.usage import UsageStats, get_usage
 from app.schemas import ForecastOut
 from app.services.forecasting_service import compute_forecast
@@ -18,6 +19,38 @@ from app.services.settings_service import get_settings
 router = APIRouter(prefix="/forecasts", tags=["forecasts"])
 ANY = Depends(require_role("admin", "store_manager", "viewer"))
 
+OUT_TYPES = {"stock_out", "stocktake"}
+
+
+def _build_daily_series(db: Session, product_id: int, window_days: int) -> list[dict]:
+    """Build per-day usage series from transactions for chart rendering."""
+    today = date.today()
+    start = today - timedelta(days=window_days)
+
+    rows = (
+        db.query(
+            func.date(StockTransaction.created_at).label("day"),
+            func.coalesce(func.sum(-StockTransaction.quantity_delta), 0).label("used"),
+        )
+        .filter(
+            StockTransaction.product_id == product_id,
+            StockTransaction.txn_type.in_(OUT_TYPES),
+            StockTransaction.quantity_delta < 0,
+            StockTransaction.created_at >= start,
+        )
+        .group_by(func.date(StockTransaction.created_at))
+        .order_by(func.date(StockTransaction.created_at))
+        .all()
+    )
+
+    # Expand to a contiguous day list (0 for days with no usage)
+    day_map = {str(r.day): int(r.used) for r in rows}
+    series = []
+    for i in range(window_days):
+        d = (start + timedelta(days=i + 1)).isoformat()
+        series.append({"date": d, "used": day_map.get(d, 0)})
+    return series
+
 
 def _run_forecast(p: Product, db: Session, window_days: int | None = None) -> ForecastOut:
     settings = get_settings(db)
@@ -25,6 +58,13 @@ def _run_forecast(p: Product, db: Session, window_days: int | None = None) -> Fo
     today = date.today()
     usage_map = get_usage(db, [p.id], window_days=w, today=today)
     u: UsageStats = usage_map.get(p.id, UsageStats(product_id=p.id, window_days=w))
+
+    # Build daily series (fallback query — works on SQLite + PostgreSQL)
+    daily_series = _build_daily_series(db, p.id, w)
+    # Merge into usage stats for EWMA calculation
+    if not u.daily_series and daily_series:
+        u.daily_series = daily_series
+
     fc = compute_forecast(
         product_id=p.id,
         current_quantity=p.current_quantity,
@@ -50,6 +90,7 @@ def _run_forecast(p: Product, db: Session, window_days: int | None = None) -> Fo
         state=fc.state,
         explanation=fc.explanation,
         trend=fc.trend,
+        daily_series=daily_series,
     )
 
 

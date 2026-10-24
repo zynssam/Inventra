@@ -71,9 +71,19 @@ def compute_forecast(
         )
 
     # ------------------------------------------------------------------ #
-    # Average daily usage — divide by the WHOLE window (observed_days)
+    # Average daily usage — EWMA when daily_series available, else simple mean
+    # α=0.3: recent days get ~3× weight of oldest days in a 30-day window
     # ------------------------------------------------------------------ #
-    avg_daily = total_usage / observed_days if observed_days > 0 else 0.0
+    if daily_series and len(daily_series) >= 3:
+        # daily_series is newest-last; compute EWMA over used-per-day values
+        alpha = 0.3
+        values = [d.get("used", 0) for d in daily_series[-window_days:]]
+        ewma = values[0]
+        for v in values[1:]:
+            ewma = alpha * v + (1 - alpha) * ewma
+        avg_daily = ewma if ewma > 0 else (total_usage / observed_days if observed_days > 0 else 0.0)
+    else:
+        avg_daily = total_usage / observed_days if observed_days > 0 else 0.0
 
     # ------------------------------------------------------------------ #
     # Sufficient data gate

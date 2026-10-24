@@ -298,6 +298,7 @@ class ForecastOut(BaseModel):
     state: str   # ok | warning | critical | out_of_stock | insufficient_data | no_recent_usage
     explanation: str
     trend: Optional[str]   # rising | steady | falling
+    daily_series: list = []   # [{date, used}] for charts
 
 
 # ---------------------------------------------------------------------------
