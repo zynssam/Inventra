@@ -1,17 +1,12 @@
 """
-app/services/inventory_service.py — the ONLY code allowed to change current_quantity.
+app/services/inventory_service.py
 
-Implements apply_movement() exactly as specified in architecture.md §4:
-  - Row lock on the product (FOR UPDATE)
-  - No negative stock → 409 INSUFFICIENT_STOCK
-  - Signed quantity_delta, balance_after
-  - Audit log row in the same transaction
-  - Append-only ledger
-
-Public API:
-  apply_movement(db, user, product_id, delta, tx_type, reason, **refs) -> StockTransaction
-  adjust(db, user, product_id, new_quantity|delta, reason) -> StockTransaction
-  reverse_transaction(db, user, tx_id, reason) -> StockTransaction
+The ONLY place in the backend that mutates product.current_quantity.
+Uses Member A's real column names:
+  - StockTransaction.txn_type  (not .type)
+  - StockTransaction.created_by (not .user_id)
+  - StockTransaction.reverses_id (not .reversal_of_id)
+  - Product.is_active (not .is_archived — and inverted: True means active)
 """
 from __future__ import annotations
 
@@ -19,37 +14,33 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.errors import ApiError
-from app.models import Product, StockTransaction, TxType
+from app.models import Product, StockTransaction
 from app.services.audit_service import audit
-
-# Transaction types that count as "usage" for forecasting
-USAGE_TYPES = {TxType.sale, TxType.issue, TxType.consumption}
 
 
 def apply_movement(
     db: Session,
-    user,
+    *,
     product_id: int,
     delta: int,
-    tx_type: TxType,
-    reason: str,
-    supplier_id: int | None = None,
-    recipient: str | None = None,
-    purchase_order_id: int | None = None,
+    tx_type: str,
+    user_id: int | None = None,
+    reason: str | None = None,
     client_request_id: str | None = None,
+    reference_type: str | None = None,
     reference_id: int | None = None,
+    reverses_id: int | None = None,
 ) -> StockTransaction:
     """
-    Atomic stock movement: lock product row → validate → update qty →
-    insert ledger row → insert audit log → return the new transaction.
-
-    The caller must NOT wrap this in its own begin(); apply_movement manages
-    the transaction boundary internally.
+    Apply a stock movement atomically.
+    delta > 0 = stock in, delta < 0 = stock out.
+    Raises ApiError on: product not found, product inactive, insufficient stock,
+    duplicate client_request_id.
     """
     if delta == 0:
         raise ApiError(422, "VALIDATION_ERROR", "quantity_delta cannot be zero")
 
-    # Idempotency check: if client_request_id already used, return existing tx
+    # Idempotency check
     if client_request_id is not None:
         existing = db.execute(
             select(StockTransaction).where(
@@ -60,21 +51,19 @@ def apply_movement(
             return existing
 
     with db.begin_nested():
-        # Row-level lock to prevent race conditions.
-        # architecture.md: SQLite does not support FOR UPDATE, skip it.
+        # Row-level lock (skip on SQLite — not supported)
         stmt = select(Product).where(Product.id == product_id)
         try:
-            dialect = db.get_bind().dialect.name
+            if db.get_bind().dialect.name != "sqlite":
+                stmt = stmt.with_for_update()
         except Exception:
-            dialect = "unknown"
-        if dialect != "sqlite":
-            stmt = stmt.with_for_update()
+            pass
         p = db.execute(stmt).scalar_one_or_none()
 
         if p is None:
             raise ApiError(404, "NOT_FOUND", f"Product {product_id} not found")
-        if p.is_archived:
-            raise ApiError(409, "PRODUCT_ARCHIVED", f"Product '{p.name}' is archived")
+        if not p.is_active:
+            raise ApiError(409, "PRODUCT_INACTIVE", f"Product '{p.name}' is inactive")
 
         new_qty = p.current_quantity + delta
         if new_qty < 0:
@@ -89,92 +78,55 @@ def apply_movement(
 
         tx = StockTransaction(
             product_id=p.id,
-            type=tx_type,
+            txn_type=tx_type,
             quantity_delta=delta,
             balance_after=new_qty,
-            user_id=user.id,
-            supplier_id=supplier_id,
-            recipient=recipient,
             reason=reason,
-            reference_id=reference_id,
-            purchase_order_id=purchase_order_id,
+            created_by=user_id,
             client_request_id=client_request_id,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            reverses_id=reverses_id,
         )
         db.add(tx)
-        db.flush()  # so tx.id is populated before audit
+        db.flush()
 
-        audit(
-            db,
-            user,
-            "STOCK_" + tx_type.value.upper(),
-            "product",
-            p.id,
-            {"delta": delta, "balance_after": new_qty, "tx_id": tx.id},
-        )
+    if user_id:
+        user = db.get(type("User", (), {})._meta if False else __import__("app.models", fromlist=["User"]).User, user_id)
+        audit(db, user, "STOCK_MOVEMENT", "product", product_id, {
+            "txn_type": tx_type, "delta": delta, "balance_after": new_qty,
+        })
 
-    db.refresh(tx)
     return tx
-
-
-def adjust(
-    db: Session,
-    user,
-    product_id: int,
-    reason: str,
-    new_quantity: int | None = None,
-    delta: int | None = None,
-) -> StockTransaction:
-    """
-    Admin-only adjustment: accepts either a new absolute quantity or a signed delta.
-    """
-    if new_quantity is None and delta is None:
-        raise ApiError(422, "VALIDATION_ERROR", "Provide new_quantity or delta")
-
-    if new_quantity is not None:
-        # We need the current qty to compute the delta
-        p = db.get(Product, product_id)
-        if p is None:
-            raise ApiError(404, "NOT_FOUND", f"Product {product_id} not found")
-        effective_delta = new_quantity - p.current_quantity
-    else:
-        effective_delta = delta  # type: ignore[assignment]
-
-    return apply_movement(
-        db, user, product_id, effective_delta, TxType.adjustment, reason
-    )
 
 
 def reverse_transaction(
     db: Session,
-    user,
-    tx_id: int,
-    reason: str,
+    *,
+    original_id: int,
+    user_id: int | None = None,
+    reason: str | None = None,
 ) -> StockTransaction:
-    """
-    Create a reversal row that is the exact opposite of the original transaction.
-    Raises ALREADY_REVERSED if another reversal already references this tx.
-    Raises INSUFFICIENT_STOCK if reversing a stock-out would go below 0 (shouldn't
-    happen for stock-in reversals, but protects stock-out reversals).
-    """
-    original = db.get(StockTransaction, tx_id)
+    """Reverse a prior transaction. Fails if already reversed."""
+    original = db.get(StockTransaction, original_id)
     if original is None:
-        raise ApiError(404, "NOT_FOUND", f"Transaction {tx_id} not found")
+        raise ApiError(404, "NOT_FOUND", f"Transaction {original_id} not found")
 
     # Check if already reversed
-    existing_reversal = db.execute(
-        select(StockTransaction).where(StockTransaction.reference_id == tx_id)
+    already = db.execute(
+        select(StockTransaction).where(StockTransaction.reverses_id == original_id)
     ).scalar_one_or_none()
-    if existing_reversal is not None:
-        raise ApiError(409, "ALREADY_REVERSED", "This transaction has already been reversed")
-
-    reversal_delta = -original.quantity_delta
+    if already is not None:
+        raise ApiError(409, "ALREADY_REVERSED", f"Transaction {original_id} has already been reversed")
 
     return apply_movement(
-        db,
-        user,
-        original.product_id,
-        reversal_delta,
-        TxType.reversal,
-        reason,
-        reference_id=tx_id,
+        db=db,
+        product_id=original.product_id,
+        delta=-original.quantity_delta,
+        tx_type="reversal",
+        user_id=user_id,
+        reason=reason or f"Reversal of transaction {original_id}",
+        reference_type="reversal",
+        reference_id=original_id,
+        reverses_id=original_id,
     )

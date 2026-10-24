@@ -5,7 +5,6 @@ POST /dev/seed-demo: calls seed_demo(db) from app.seed (Member A's).
   If it doesn't exist, returns 501.
 POST /dev/reset: clears all data.
 """
-from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -40,15 +39,13 @@ def seed_demo(db: Session = Depends(get_db), _: User = ADMIN):
 @router.post("/reset")
 def reset_db(db: Session = Depends(get_db), _: User = ADMIN):
     _check_debug()
-    # Clear all transactional data (not schema)
     from app.models import (
         AuditLog, PurchaseOrder, PurchaseOrderItem, StockTransaction,
-        Stocktake, StocktakeLine,
+        Stocktake, StocktakeLine, Product, Supplier, Category,
     )
     for model in [AuditLog, StocktakeLine, Stocktake, PurchaseOrderItem,
                   PurchaseOrder, StockTransaction]:
         db.query(model).delete()
-    from app.models import Product, Supplier, Category
     db.query(Product).delete()
     db.query(Supplier).delete()
     db.query(Category).delete()

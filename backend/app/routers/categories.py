@@ -2,7 +2,6 @@
 app/routers/categories.py — /categories endpoints
 Roles: GET any logged-in; POST/PATCH admin+storekeeper; DELETE admin only.
 """
-from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -27,7 +26,7 @@ def _with_count(cat: Category, db: Session) -> CategoryOut:
 @router.get("", response_model=list[CategoryOut])
 def list_categories(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin", "storekeeper", "viewer")),
+    _: User = Depends(require_role("admin", "store_manager", "viewer")),
 ):
     cats = db.query(Category).order_by(Category.name).all()
     return [_with_count(c, db) for c in cats]
@@ -37,7 +36,7 @@ def list_categories(
 def create_category(
     body: CategoryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "storekeeper")),
+    current_user: User = Depends(require_role("admin", "store_manager")),
 ):
     if db.query(Category).filter(Category.name == body.name).one_or_none():
         raise ApiError(409, "DUPLICATE_SKU", "Category name already exists", field="name")
@@ -55,7 +54,7 @@ def update_category(
     cat_id: int,
     body: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "storekeeper")),
+    current_user: User = Depends(require_role("admin", "store_manager")),
 ):
     cat = db.get(Category, cat_id)
     if cat is None:

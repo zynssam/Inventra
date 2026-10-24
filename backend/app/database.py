@@ -1,15 +1,50 @@
 """
-app/database.py — shim that re-exports Member A's database helpers.
+app/database.py — SQLAlchemy engine, session, and get_db dependency.
 
-⚠️  When Member A delivers the real database.py, REPLACE the single import
-    line below with the real implementation. Delete app/_temp/database_temp.py too.
+Uses Member A's real models. Engine is created lazily (on first use)
+so that importing this module during tests with SQLite override doesn't
+attempt to connect to PostgreSQL.
 """
-# ONE import line — swap this when Member A delivers
-from app._temp.database_temp import (  # noqa: F401
-    engine,
-    SessionLocal,
-    get_db,
-    create_tables,
-)
+from __future__ import annotations
 
-from app._temp.models_temp import Base  # noqa: F401
+from typing import Generator
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.config import settings
+
+_engine = None
+_SessionLocal = None
+
+
+def _get_engine():
+    global _engine, _SessionLocal
+    if _engine is None:
+        connect_args = {}
+        if settings.DATABASE_URL.startswith("sqlite"):
+            connect_args = {"check_same_thread": False}
+        _engine = create_engine(settings.DATABASE_URL, connect_args=connect_args)
+        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+    return _engine
+
+
+# Expose engine for create_tables / tests
+@property
+def engine():
+    return _get_engine()
+
+
+def get_db() -> Generator[Session, None, None]:
+    _get_engine()  # ensure initialized
+    db: Session = _SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def create_tables():
+    """Create all tables — used in tests and dev startup."""
+    from app.models import Base
+    Base.metadata.create_all(bind=_get_engine())

@@ -36,7 +36,11 @@ from app.routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create all tables on startup (dev convenience; prod uses Alembic)."""
-    create_tables()
+    try:
+        create_tables()
+    except Exception as exc:
+        import logging
+        logging.getLogger("app").warning("create_tables skipped: %s", exc)
     yield
 
 
@@ -91,12 +95,11 @@ def health():
 def meta_enums():
     """Returns all enum values so the frontend dropdowns stay in sync."""
     return {
-        "transaction_types": ["purchase", "return_in", "sale", "issue", "consumption", "adjustment", "reversal"],
-        "roles": ["admin", "storekeeper", "viewer"],
+        "transaction_types": ["stock_in", "stock_out", "adjustment", "reversal", "po_receipt", "stocktake"],
+        "roles": ["admin", "store_manager", "viewer"],
         "po_statuses": ["draft", "ordered", "partially_received", "received", "cancelled"],
-        "stocktake_statuses": ["in_progress", "finalized", "cancelled"],
-        "units": ["pcs", "box", "kg", "litre", "bottle", "pack", "roll", "pair", "set"],
-        "sort_fields": ["name", "sku", "current_quantity", "unit_cost", "updated_at"],
+        "stocktake_statuses": ["open", "applied", "cancelled"],
+        "sort_fields": ["name", "sku", "current_quantity", "unit_cost"],
         "forecast_states": ["ok", "warning", "critical", "out_of_stock", "insufficient_data", "no_recent_usage"],
     }
 

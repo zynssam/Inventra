@@ -1,12 +1,14 @@
 """
-app/dependencies.py — FastAPI dependency functions for auth and RBAC.
+app/dependencies.py — FastAPI dependencies for auth and RBAC.
 
-get_current_user   — validates JWT, returns User ORM object
-require_role(*roles) — factory that returns a Depends() asserting the user has one of the given roles
+Works with Member A's real User model:
+  - User.full_name (not .name)
+  - User.role is plain str; values: admin | store_manager | viewer
+  - User.is_active (bool)
 """
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -24,12 +26,13 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     if credentials is None:
-        raise ApiError(401, "INVALID_CREDENTIALS", "Missing authentication token")
+        raise ApiError(401, "INVALID_CREDENTIALS", "Missing Authorization header")
+    token = credentials.credentials
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise ApiError(401, "INVALID_CREDENTIALS", "Invalid token")
+            raise ApiError(401, "INVALID_CREDENTIALS", "Invalid token payload")
     except JWTError:
         raise ApiError(401, "INVALID_CREDENTIALS", "Invalid or expired token")
 
@@ -41,12 +44,11 @@ def get_current_user(
 
 def require_role(*roles: str):
     """
-    Factory returning a dependency that asserts the current user has one of
-    the given roles.  E.g. Depends(require_role("admin", "storekeeper")).
+    Factory that returns a FastAPI dependency function enforcing role membership.
+    Usage:  current_user: User = Depends(require_role("admin", "store_manager"))
     """
-    def _check(user: User = Depends(get_current_user)) -> User:
-        if user.role.value not in roles:
-            raise ApiError(403, "FORBIDDEN", f"Role '{user.role.value}' cannot perform this action")
-        return user
-
-    return _check
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in roles:
+            raise ApiError(403, "FORBIDDEN", f"Required role(s): {', '.join(roles)}")
+        return current_user
+    return dependency

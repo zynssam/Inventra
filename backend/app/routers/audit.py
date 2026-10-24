@@ -1,10 +1,7 @@
-"""
-app/routers/audit.py — GET /audit-logs (admin only)
-"""
-from __future__ import annotations
+"""app/routers/audit.py — GET /audit-logs (admin only)"""
 
 from datetime import date
-from typing import Optional
+from typing import Optional, Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -15,8 +12,6 @@ from app.models import AuditLog, User
 from app.schemas import AuditLogOut, Page
 
 router = APIRouter(prefix="/audit-logs", tags=["audit"])
-
-ADMIN = Depends(require_role("admin"))
 
 
 @router.get("", response_model=Page[AuditLogOut])
@@ -30,7 +25,7 @@ def list_audit_logs(
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
-    _: User = ADMIN,
+    current_user: User = Depends(require_role("admin")),
 ):
     q = db.query(AuditLog)
     if user_id is not None:
@@ -47,7 +42,4 @@ def list_audit_logs(
         q = q.filter(AuditLog.created_at <= date_to)
     total = q.count()
     items = q.order_by(AuditLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    return Page(
-        items=[AuditLogOut.model_validate(a) for a in items],
-        total=total, page=page, page_size=page_size,
-    )
+    return Page(items=[AuditLogOut.model_validate(a) for a in items], total=total, page=page, page_size=page_size)
