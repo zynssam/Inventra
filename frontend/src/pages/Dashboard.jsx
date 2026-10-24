@@ -83,17 +83,17 @@ export default function Dashboard() {
             <>
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={catVal} dataKey="total_value" nameKey="category" cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={3}>
+                  <Pie data={catVal} dataKey="value" nameKey="category" cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={3}>
                     {catVal.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "#1e2132", border: "1px solid #2a2d3e", borderRadius: 8, fontSize: 12 }} formatter={v => fmtCurrency(v)} />
+                  <Tooltip contentStyle={{ background: "#1e2132", border: "1px solid #2a2d3e", borderRadius: 8, fontSize: 12 }} formatter={v => [`$${Number(v).toFixed(0)}`, "Value"]} />
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 8 }}>
                 {catVal.map((c, i) => (
                   <span key={i} style={{ fontSize: 11, color: "var(--text-2)", display: "flex", alignItems: "center", gap: 5 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS[i % COLORS.length], display: "inline-block" }} />
-                    {c.category}
+                    {c.category} <span style={{ color: "var(--muted)" }}>${Number(c.value).toFixed(0)}</span>
                   </span>
                 ))}
               </div>
