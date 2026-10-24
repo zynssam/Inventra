@@ -124,6 +124,7 @@ class CategoryOut(ORMBase):
     id: int
     name: str
     description: Optional[str] = None
+    product_count: int = 0
 
 
 class CategoryBrief(ORMBase):
