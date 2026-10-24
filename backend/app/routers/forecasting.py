@@ -39,6 +39,8 @@ def _run_forecast(p: Product, db: Session, window_days: int | None = None) -> Fo
     )
     return ForecastOut(
         product_id=fc.product_id,
+        product_name=p.name,
+        sku=p.sku,
         current_quantity=fc.current_quantity,
         avg_daily_usage=fc.avg_daily_usage,
         window_days=fc.window_days,

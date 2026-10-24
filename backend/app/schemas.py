@@ -285,6 +285,8 @@ class TransactionOut(ORMBase):
 
 class ForecastOut(BaseModel):
     product_id: int
+    product_name: Optional[str] = None
+    sku: Optional[str] = None
     current_quantity: int
     avg_daily_usage: Optional[float]
     window_days: int
