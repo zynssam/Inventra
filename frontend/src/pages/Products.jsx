@@ -2,10 +2,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { Products as API, Categories, Suppliers } from "../api";
 import { useAuth } from "../context/AuthContext";
-import { PageHeader, Modal, StatusBadge, ForecastBadge, Empty, LoadingCenter, Confirm } from "../components/ui";
+import { PageHeader, Modal, StatusBadge, ForecastBadge, Empty, Confirm } from "../components/ui";
 import { useToast } from "../hooks/useToast";
 import { ToastContainer } from "../components/ui";
 import { Plus, Search, Edit2, Archive, RefreshCw } from "lucide-react";
+import { QRBadge, ProductQRCode } from "../components/QRDisplay";
 
 function ProductForm({ initial = {}, categories = [], suppliers = [], onSave, onClose }) {
   const [form, setForm] = useState({
@@ -67,6 +68,22 @@ function ProductForm({ initial = {}, categories = [], suppliers = [], onSave, on
         <div className="field"><label>Reorder Point</label><input className="input" type="number" value={form.reorder_point} onChange={set("reorder_point")} /></div>
         <div className="field"><label>Min Order Qty</label><input className="input" type="number" value={form.min_order_qty} onChange={set("min_order_qty")} /></div>
       </div>
+
+      {/* QR code panel — shown for existing products */}
+      {initial.id && initial.sku && (
+        <div style={{ borderTop: "1px solid var(--line)", paddingTop: 18, marginTop: 6 }}>
+          <div className="section-title" style={{ marginBottom: 14 }}>Product QR Code</div>
+          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <ProductQRCode sku={initial.sku} name={initial.name} size={120} />
+            <div style={{ flex: 1, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
+              <p>This QR code encodes the product SKU: <strong style={{ color: "var(--text)", fontFamily: "monospace" }}>{initial.sku}</strong></p>
+              <p>Use <strong style={{ color: "var(--text)" }}>Scan QR</strong> on the Transactions page to instantly select this product when recording stock in or out.</p>
+              <p>Download the SVG and print it on labels to attach to physical shelves or pallets.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={loading}>{loading ? "Saving…" : "Save Product"}</button>
@@ -149,7 +166,7 @@ export default function Products() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Product</th><th>SKU</th><th>Stock</th><th>Reorder At</th><th>Unit Cost</th><th>Status</th><th>Forecast</th>{canWrite && <th></th>}</tr>
+              <tr><th>Product</th><th>SKU</th><th>QR</th><th>Stock</th><th>Reorder At</th><th>Unit Cost</th><th>Status</th><th>Forecast</th>{canWrite && <th></th>}</tr>
             </thead>
             <tbody>
               {loading ? (
@@ -160,6 +177,7 @@ export default function Products() {
                 <tr key={p.id}>
                   <td><div style={{ fontWeight: 600 }}>{p.name}</div><div className="td-muted">{p.unit}</div></td>
                   <td className="font-mono">{p.sku}</td>
+                  <td><QRBadge sku={p.sku} name={p.name} /></td>
                   <td><span className="quantity" style={{ color: statusColor(p.status) }}>{p.current_quantity}</span></td>
                   <td className="td-muted">{p.reorder_point}</td>
                   <td>{fmtCurrency(p.unit_cost)}</td>
